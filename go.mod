@@ -7,7 +7,7 @@ require (
 	github.com/appleboy/gin-jwt/v2 v2.9.2
 	github.com/dlclark/regexp2 v1.11.0
 	github.com/gin-gonic/gin v1.10.0
-	github.com/yqBdm7y/devtool v0.0.0-20240606011143-02c1a4993fa3
+	github.com/yqBdm7y/devtool v0.0.0-20240607124836-90a1400eb1fd
 	golang.org/x/crypto v0.24.0
 	gorm.io/driver/mysql v1.5.6
 	gorm.io/gorm v1.25.10
