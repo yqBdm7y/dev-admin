@@ -30,6 +30,13 @@ func (r Role) Create(c *gin.Context) {
 		return
 	}
 
+	var checkDuplicate int64
+	d.Database[d.LibraryGorm]{}.Get().DB.Model(&Role{}).Where("name = ?", form.Name).Count(&checkDuplicate)
+	if checkDuplicate > 0 {
+		d.Gin{}.Error(c, Err(errors.New("duplicate name")))
+		return
+	}
+
 	result := d.Database[d.LibraryGorm]{}.Get().DB.Create(&form)
 	if result.Error != nil {
 		d.Gin{}.Error(c, Err(result.Error))
@@ -46,7 +53,14 @@ func (r Role) Edit(c *gin.Context) {
 		return
 	}
 
-	result := d.Database[d.LibraryGorm]{}.Get().DB.Omit("created_at").Save(&form)
+	var checkDuplicate int64
+	d.Database[d.LibraryGorm]{}.Get().DB.Model(&Role{}).Where("id != ?", form.ID).Where("name = ?", form.Name).Count(&checkDuplicate)
+	if checkDuplicate > 0 {
+		d.Gin{}.Error(c, Err(errors.New("duplicate name")))
+		return
+	}
+
+	result := d.Database[d.LibraryGorm]{}.Get().DB.Omit("status", "created_at").Save(&form)
 	if result.Error != nil {
 		d.Gin{}.Error(c, Err(result.Error))
 		return

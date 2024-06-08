@@ -20,7 +20,7 @@ type User struct {
 	Status       int            `json:"status"`
 	Avatar       string         `json:"avatar"`
 	Username     string         `json:"username"`
-	Password     string         `json:"password"`
+	Password     string         `json:"-"`
 	Nickname     string         `json:"nickname"`
 	Phone        string         `json:"phone"`
 	Email        string         `json:"email"`
@@ -33,11 +33,24 @@ type User struct {
 
 // Create User
 func (u User) Create(c *gin.Context) {
-	var form User
+	type user struct {
+		User
+		Password string `json:"password"`
+	}
+
+	var form user
 	if err := c.ShouldBindJSON(&form); err != nil {
 		d.Gin{}.Error(c, Err(err))
 		return
 	}
+
+	var checkDuplicate int64
+	d.Database[d.LibraryGorm]{}.Get().DB.Model(&User{}).Where("username = ?", form.Username).Count(&checkDuplicate)
+	if checkDuplicate > 0 {
+		d.Gin{}.Error(c, Err(errors.New("duplicate username")))
+		return
+	}
+
 	// Encryption password
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(form.Password), bcrypt.DefaultCost)
 	if err != nil {
@@ -63,7 +76,14 @@ func (u User) Edit(c *gin.Context) {
 		return
 	}
 
-	result := d.Database[d.LibraryGorm]{}.Get().DB.Save(&form)
+	var checkDuplicate int64
+	d.Database[d.LibraryGorm]{}.Get().DB.Model(&User{}).Where("id != ?", form.ID).Where("username = ?", form.Username).Count(&checkDuplicate)
+	if checkDuplicate > 0 {
+		d.Gin{}.Error(c, Err(errors.New("duplicate username")))
+		return
+	}
+
+	result := d.Database[d.LibraryGorm]{}.Get().DB.Omit("password", "created_at").Save(&form)
 	if result.Error != nil {
 		d.Gin{}.Error(c, Err(result.Error))
 		return
@@ -102,7 +122,12 @@ func (u User) EditStatus(c *gin.Context) {
 
 // Edit user password
 func (u User) EditPassword(c *gin.Context) {
-	var form User
+	type user struct {
+		User
+		Password string `json:"password"`
+	}
+
+	var form user
 	if err := c.ShouldBindJSON(&form); err != nil {
 		d.Gin{}.Error(c, Err(err))
 		return

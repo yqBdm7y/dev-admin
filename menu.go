@@ -278,42 +278,6 @@ func (m Menu) GetIdsByRoleId(c *gin.Context) {
 	d.Gin{}.Success(c, Success(ids))
 }
 
-// 根据角色 id 查对应叶子菜单ID
-func (m Menu) GetLeafIdsByRoleId(c *gin.Context) {
-	// 获取 URL 中的参数
-	idStr := c.Query("role_id")
-
-	// 将字符串格式的 ID 转化为整数
-	rid, err := strconv.Atoi(idStr)
-	if err != nil || rid <= 0 {
-		// 处理转化错误
-		d.Gin{}.Error(c, Err(err))
-		return
-	}
-
-	var (
-		r   Role
-		ids []int
-	)
-	result := d.Database[d.LibraryGorm]{}.Get().DB.Preload("Menus").First(&r, rid)
-	if result.Error != nil {
-		d.Gin{}.Error(c, Err(result.Error))
-		return
-	}
-
-	menus := d.FilterLeafNode(r.Menus, func(dm Menu) int {
-		return int(dm.ID)
-	}, func(dm Menu) int {
-		return int(dm.ParentId)
-	})
-
-	for _, v := range menus {
-		ids = append(ids, int(v.ID))
-	}
-
-	d.Gin{}.Success(c, Success(ids))
-}
-
 // 检查子菜单是否存在
 func (m Menu) CheckIfSubmenuExist(form Menu) bool {
 	var total int64
