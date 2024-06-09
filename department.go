@@ -25,6 +25,28 @@ type Department struct {
 	Remark    string         `json:"remark"`
 }
 
+func (de Department) GetAll(c *gin.Context) {
+	var data []Department
+	d.Database[d.LibraryGorm]{}.Get().DB.Order("sort asc").Order("created_at desc").Find(&data)
+
+	d.Gin{}.Success(c, Success(data))
+}
+
+func (de Department) GetList(c *gin.Context) {
+	var query = d.Database[d.LibraryGorm]{}.Get().DB.Model(&Department{}).Order("created_at desc")
+
+	var data []Department
+	p, err := d.Gin{}.GetListWithFuzzyQuery(c, query, nil, &data)
+	if err != nil {
+		d.Gin{}.Error(c, Err(err))
+		return
+	}
+	v := p.(d.LibraryPagination)
+	v.DataList = data
+
+	d.Gin{}.Success(c, Success(v.ToMap()))
+}
+
 func (de Department) Create(c *gin.Context) {
 	var form Department
 	if err := c.ShouldBindJSON(&form); err != nil {
@@ -78,26 +100,4 @@ func (de Department) Delete(c *gin.Context) {
 	}
 
 	d.Gin{}.Success(c, Success(form.ID))
-}
-
-func (de Department) GetList(c *gin.Context) {
-	var query = d.Database[d.LibraryGorm]{}.Get().DB.Model(&Department{}).Order("created_at desc")
-
-	var data []Department
-	p, err := d.Gin{}.GetListWithFuzzyQuery(c, query, nil, &data)
-	if err != nil {
-		d.Gin{}.Error(c, Err(err))
-		return
-	}
-	v := p.(d.LibraryPagination)
-	v.DataList = data
-
-	d.Gin{}.Success(c, Success(v.ToMap()))
-}
-
-func (de Department) GetAll(c *gin.Context) {
-	var data []Department
-	d.Database[d.LibraryGorm]{}.Get().DB.Order("sort asc").Order("created_at desc").Find(&data)
-
-	d.Gin{}.Success(c, Success(data))
 }

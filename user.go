@@ -31,6 +31,20 @@ type User struct {
 	Department   Department     `json:"department"`
 }
 
+func (u User) GetList(c *gin.Context) {
+	var query = d.Database[d.LibraryGorm]{}.Get().DB.Model(&User{}).Preload("Department").Order("created_at desc")
+	var data []User
+	p, err := d.Gin{}.GetListWithFuzzyQuery(c, query, []string{"username", "phone", "status", "department_id"}, &data)
+	if err != nil {
+		d.Gin{}.Error(c, Err(err))
+		return
+	}
+	v := p.(d.LibraryPagination)
+	v.DataList = data
+
+	d.Gin{}.Success(c, Success(v.ToMap()))
+}
+
 // Create User
 func (u User) Create(c *gin.Context) {
 	type user struct {
@@ -154,6 +168,22 @@ func (u User) EditPassword(c *gin.Context) {
 	d.Gin{}.Success(c, Success(form.ID))
 }
 
+func (u User) AssociateRole(c *gin.Context) {
+	var form User
+	if err := c.ShouldBindJSON(&form); err != nil {
+		d.Gin{}.Error(c, Err(err))
+		return
+	}
+
+	err := d.Database[d.LibraryGorm]{}.Get().DB.Model(&form).Association("Roles").Replace(form.Roles)
+	if err != nil {
+		d.Gin{}.Error(c, Err(err))
+		return
+	}
+
+	d.Gin{}.Success(c, Success(form.ID))
+}
+
 // Delete user
 func (u User) Delete(c *gin.Context) {
 	var form User
@@ -228,36 +258,6 @@ func (u User) DeleteMultiple(c *gin.Context) {
 	}
 
 	d.Gin{}.Success(c, Success(idList))
-}
-
-func (u User) GetList(c *gin.Context) {
-	var query = d.Database[d.LibraryGorm]{}.Get().DB.Model(&User{}).Preload("Department").Order("created_at desc")
-	var data []User
-	p, err := d.Gin{}.GetListWithFuzzyQuery(c, query, []string{"username", "phone", "status", "department_id"}, &data)
-	if err != nil {
-		d.Gin{}.Error(c, Err(err))
-		return
-	}
-	v := p.(d.LibraryPagination)
-	v.DataList = data
-
-	d.Gin{}.Success(c, Success(v.ToMap()))
-}
-
-func (u User) AssociateRole(c *gin.Context) {
-	var form User
-	if err := c.ShouldBindJSON(&form); err != nil {
-		d.Gin{}.Error(c, Err(err))
-		return
-	}
-
-	err := d.Database[d.LibraryGorm]{}.Get().DB.Model(&form).Association("Roles").Replace(form.Roles)
-	if err != nil {
-		d.Gin{}.Error(c, Err(err))
-		return
-	}
-
-	d.Gin{}.Success(c, Success(form.ID))
 }
 
 // Verify user password

@@ -184,6 +184,33 @@ func (m Menu) GetTree(c *gin.Context) {
 	d.Gin{}.Success(c, Success(treeData))
 }
 
+// 根据角色 id 查对应菜单ID
+func (m Menu) GetIdsByRoleId(c *gin.Context) {
+	// 获取 URL 中的参数
+	idStr := c.Query("role_id")
+
+	// 将字符串格式的 ID 转化为整数
+	rid, err := strconv.Atoi(idStr)
+	if err != nil || rid <= 0 {
+		// 处理转化错误
+		d.Gin{}.Error(c, Err(err))
+		return
+	}
+
+	var r Role
+	result := d.Database[d.LibraryGorm]{}.Get().DB.Preload("Menus").First(&r, rid)
+	if result.Error != nil {
+		d.Gin{}.Error(c, Err(result.Error))
+		return
+	}
+	var ids []int
+	for _, v := range r.Menus {
+		ids = append(ids, int(v.ID))
+	}
+
+	d.Gin{}.Success(c, Success(ids))
+}
+
 // 创建菜单
 func (m Menu) Create(c *gin.Context) {
 	var form Menu
@@ -249,33 +276,6 @@ func (m Menu) Delete(c *gin.Context) {
 	}
 
 	d.Gin{}.Success(c, Success(form.ID))
-}
-
-// 根据角色 id 查对应菜单ID
-func (m Menu) GetIdsByRoleId(c *gin.Context) {
-	// 获取 URL 中的参数
-	idStr := c.Query("role_id")
-
-	// 将字符串格式的 ID 转化为整数
-	rid, err := strconv.Atoi(idStr)
-	if err != nil || rid <= 0 {
-		// 处理转化错误
-		d.Gin{}.Error(c, Err(err))
-		return
-	}
-
-	var r Role
-	result := d.Database[d.LibraryGorm]{}.Get().DB.Preload("Menus").First(&r, rid)
-	if result.Error != nil {
-		d.Gin{}.Error(c, Err(result.Error))
-		return
-	}
-	var ids []int
-	for _, v := range r.Menus {
-		ids = append(ids, int(v.ID))
-	}
-
-	d.Gin{}.Success(c, Success(ids))
 }
 
 // 检查子菜单是否存在
