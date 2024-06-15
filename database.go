@@ -18,14 +18,14 @@ func (da Database) Migrate() {
 }
 
 // 插入初始化数据
-func (da Database) InsertInitData() {
+func (da Database) InsertInitData() (initialized bool, err error) {
 	// 获取初始化用户数据
 	init_user_data, err := get_init_user_data()
 	if err != nil {
 		panic(err)
 	}
 
-	err = d.Database[d.LibraryGorm]{}.Get().InsertInitializationData(
+	initialized, err = d.Database[d.LibraryGorm]{}.Get().InsertInitializationData(
 		init_department_data,
 		init_role_data,
 		init_menu_data,
@@ -34,6 +34,8 @@ func (da Database) InsertInitData() {
 	if err != nil {
 		panic(err)
 	}
+
+	return initialized, nil
 }
 
 var (
