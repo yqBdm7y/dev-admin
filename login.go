@@ -1,6 +1,7 @@
 package dadmin
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -11,33 +12,23 @@ import (
 
 	jwt "github.com/appleboy/gin-jwt/v2"
 	"github.com/gin-gonic/gin"
+	jwt2 "github.com/golang-jwt/jwt/v4"
 )
 
 type Login struct{}
 
-func (l Login) Init() *jwt.GinJWTMiddleware {
-	randomKey, err := d.String{}.GenerateRandomString(64)
-	if err != nil {
-		panic(err)
+// 获取用户
+func (l Login) GetUser(c *gin.Context) (u User) {
+	claims := jwt.ExtractClaims(c)
+	u = User{
+		ID:       uint(claims["id"].(float64)),
+		Username: claims["username"].(string),
+		Nickname: claims["nickname"].(string),
 	}
-	b := d.Config[d.LibraryViper]{}.Get().GetBool(ConfigPathIsDebug)
-	if b {
-		randomKey = ""
-	}
-	return &jwt.GinJWTMiddleware{
-		Realm:           "erp",
-		Key:             []byte(randomKey),
-		MaxRefresh:      time.Hour,
-		PayloadFunc:     l.PayloadFunc(),
-		Authenticator:   l.Authenticator(),
-		Authorizator:    l.Authorizator(),
-		LoginResponse:   l.LoginResponse(),
-		Unauthorized:    l.Unauthorized(),
-		LogoutResponse:  l.LogoutResponse(),
-		RefreshResponse: l.RefreshResponse(),
-	}
+	return u
 }
 
+// 处理空路由
 func (l Login) HandleNoRoute() func(c *gin.Context) {
 	return func(c *gin.Context) {
 		claims := jwt.ExtractClaims(c)
@@ -46,8 +37,128 @@ func (l Login) HandleNoRoute() func(c *gin.Context) {
 	}
 }
 
+type login struct {
+	Key        string
+	Timeout    time.Duration
+	MaxRefresh time.Duration
+	Field      struct {
+		AccessToken  string
+		RefreshToken string
+		Expire       string
+	}
+}
+
+type login_option interface {
+	apply(login *login)
+}
+
+// Set default key
+type login_option_key string
+
+func (l login_option_key) apply(login *login) {
+	login.Key = string(l)
+}
+
+func LoginWithKey(key string) login_option {
+	return login_option_key(key)
+}
+
+// Set default Timeout
+type login_option_timeout time.Duration
+
+func (l login_option_timeout) apply(login *login) {
+	login.Timeout = time.Duration(l)
+}
+
+func LoginWithTimeout(value time.Duration) login_option {
+	return login_option_timeout(value)
+}
+
+// Set default MaxRefresh
+type login_option_max_refresh time.Duration
+
+func (l login_option_max_refresh) apply(login *login) {
+	login.MaxRefresh = time.Duration(l)
+}
+
+func LoginWithMaxRefresh(value time.Duration) login_option {
+	return login_option_max_refresh(value)
+}
+
+// Set Custom field - Access Token
+type login_option_custom_field_access_token string
+
+func (l login_option_custom_field_access_token) apply(login *login) {
+	login.Field.AccessToken = string(l)
+}
+
+func LoginWithCustomFieldAccessToken(custom_field string) login_option {
+	return login_option_custom_field_access_token(custom_field)
+}
+
+// Set Custom field - Refresh Token
+type login_option_custom_field_refresh_token string
+
+func (l login_option_custom_field_refresh_token) apply(login *login) {
+	login.Field.RefreshToken = string(l)
+}
+
+func LoginWithCustomFieldRefreshToken(custom_field string) login_option {
+	return login_option_custom_field_refresh_token(custom_field)
+}
+
+// Set Custom field - Expire
+type login_option_custom_field_expire string
+
+func (l login_option_custom_field_expire) apply(login *login) {
+	login.Field.Expire = string(l)
+}
+
+func LoginWithCustomFieldExpire(custom_field string) login_option {
+	return login_option_custom_field_expire(custom_field)
+}
+
+func LoginNew(opts ...login_option) *jwt.GinJWTMiddleware {
+	// 如果没有设置KEY，则使用随机字符串
+	defaultKey, err := d.String{}.GenerateRandomString(64)
+	if err != nil {
+		panic(err)
+	}
+
+	// Set default parameters
+	l := &login{
+		Key:        defaultKey,
+		Timeout:    time.Hour * 2,
+		MaxRefresh: time.Hour * 24,
+		Field: struct{ AccessToken, RefreshToken, Expire string }{
+			AccessToken:  "token",
+			RefreshToken: "refresh_token",
+			Expire:       "expire",
+		},
+	}
+
+	for _, opt := range opts {
+		opt.apply(l)
+	}
+
+	return &jwt.GinJWTMiddleware{
+		Realm:           "dev-admin",
+		Key:             []byte(l.Key),
+		Timeout:         l.Timeout,
+		MaxRefresh:      l.MaxRefresh,
+		PayloadFunc:     l.PayloadFunc(),
+		Authenticator:   l.Authenticator(),
+		Authorizator:    l.Authorizator(),
+		LoginResponse:   l.LoginResponse(),
+		Unauthorized:    l.Unauthorized(),
+		LogoutResponse:  l.LogoutResponse(),
+		RefreshResponse: l.RefreshResponse(),
+		TokenLookup:     "header: Authorization, query: " + l.Field.RefreshToken,
+	}
+}
+
 // 登录验证
-func (l Login) Authenticator() func(c *gin.Context) (interface{}, error) {
+func (l login) Authenticator() func(c *gin.Context) (interface{}, error) {
 	type login struct {
 		Username     string `json:"username" binding:"required"`
 		Password     string `json:"password" binding:"required"`
@@ -93,7 +204,7 @@ func (l Login) Authenticator() func(c *gin.Context) (interface{}, error) {
 }
 
 // 设置Payload
-func (l Login) PayloadFunc() func(data interface{}) jwt.MapClaims {
+func (l login) PayloadFunc() func(data interface{}) jwt.MapClaims {
 	return func(data interface{}) jwt.MapClaims {
 		if v, ok := data.(*User); ok {
 			return jwt.MapClaims{
@@ -107,7 +218,7 @@ func (l Login) PayloadFunc() func(data interface{}) jwt.MapClaims {
 }
 
 // 校验权限
-func (l Login) Authorizator() func(data interface{}, c *gin.Context) bool {
+func (l login) Authorizator() func(data interface{}, c *gin.Context) bool {
 	return func(data interface{}, c *gin.Context) bool {
 
 		claims := jwt.ExtractClaims(c)
@@ -153,18 +264,50 @@ func (l Login) Authorizator() func(data interface{}, c *gin.Context) bool {
 	}
 }
 
-func (l Login) LoginResponse() func(c *gin.Context, code int, message string, time time.Time) {
+func (l login) LoginResponse() func(c *gin.Context, code int, message string, time time.Time) {
 	return func(c *gin.Context, code int, token string, expire time.Time) {
+		// 解析当前token
+		oriToken, err := jwt2.Parse(token, func(t *jwt2.Token) (interface{}, error) {
+			return []byte(l.Key), nil
+		})
+		if err != nil {
+			d.Gin{}.Error(c, Err(err))
+			return
+		}
+
+		// 获取 claims
+		oriClaims, ok := oriToken.Claims.(jwt2.MapClaims)
+		if !ok {
+			d.Gin{}.Error(c, Err(errors.New("invalid claims type")))
+			return
+		}
+
+		// 获取特定的 claim 值
+		userId, exists := oriClaims["id"]
+		if !exists {
+			d.Gin{}.Error(c, Err(errors.New("id claim not found")))
+			return
+		}
+
+		// 生成刷新令牌
+		refreshToken := jwt2.New(jwt2.GetSigningMethod("HS256"))
+		claims := refreshToken.Claims.(jwt2.MapClaims)
+		claims["orig_iat"] = time.Now().Unix()
+		claims["ip"] = c.ClientIP()
+		claims["id"] = userId
+		tokenString, _ := refreshToken.SignedString([]byte(l.Key))
+
 		api := d.Api[d.LibraryApi]{}.Get()
 		api.Response.Data = gin.H{
-			"token":  token,
-			"expire": expire.Format(time.RFC3339),
+			l.Field.AccessToken:  token,
+			l.Field.Expire:       expire,
+			l.Field.RefreshToken: tokenString,
 		}
 		d.Gin{}.Success(c, api)
 	}
 }
 
-func (l Login) Unauthorized() func(c *gin.Context, code int, message string) {
+func (l login) Unauthorized() func(c *gin.Context, code int, message string) {
 	return func(c *gin.Context, code int, message string) {
 		api := d.Api[d.LibraryApi]{}.Get()
 		api.Response.Code = code
@@ -173,7 +316,7 @@ func (l Login) Unauthorized() func(c *gin.Context, code int, message string) {
 	}
 }
 
-func (l Login) LogoutResponse() func(c *gin.Context, code int) {
+func (l login) LogoutResponse() func(c *gin.Context, code int) {
 	return func(c *gin.Context, code int) {
 		api := d.Api[d.LibraryApi]{}.Get()
 		api.Response.Code = code
@@ -181,25 +324,48 @@ func (l Login) LogoutResponse() func(c *gin.Context, code int) {
 	}
 }
 
-func (l Login) RefreshResponse() func(c *gin.Context, code int, token string, expire time.Time) {
+func (l login) RefreshResponse() func(c *gin.Context, code int, token string, expire time.Time) {
 	return func(c *gin.Context, code int, token string, expire time.Time) {
+		// 判断是否有refresh token
+		refToken := c.Query(l.Field.RefreshToken)
+		if len(refToken) != 0 {
+			// 解析当前refresh token
+			oriToken, err := jwt2.Parse(refToken, func(t *jwt2.Token) (interface{}, error) {
+				return []byte(l.Key), nil
+			})
+			if err != nil {
+				d.Gin{}.Error(c, Err(err))
+				return
+			}
+
+			// 获取 claims
+			oriClaims, ok := oriToken.Claims.(jwt2.MapClaims)
+			if !ok {
+				d.Gin{}.Error(c, Err(errors.New("invalid claims type")))
+				return
+			}
+
+			// 获取特定的 claim 值
+			ipAddr, exists := oriClaims["ip"]
+			if !exists {
+				d.Gin{}.Error(c, Err(errors.New("ip claim not found")))
+				return
+			}
+
+			// 判断当前IP是否和refresh token中的IP一致
+			if c.ClientIP() != ipAddr {
+				d.Gin{}.Error(c, Err(errors.New("ip校验不通过")))
+				return
+			}
+		}
+
 		api := d.Api[d.LibraryApi]{}.Get()
 		api.Response.Code = http.StatusOK
 		api.Response.Data = gin.H{
-			"token":  token,
-			"expire": expire.Format(time.RFC3339),
+			l.Field.AccessToken:  token,
+			l.Field.Expire:       expire.Format(time.RFC3339),
+			l.Field.RefreshToken: c.Query(l.Field.RefreshToken),
 		}
 		d.Gin{}.Success(c, api)
 	}
-}
-
-// 获取用户
-func (l Login) GetUser(c *gin.Context) (u User) {
-	claims := jwt.ExtractClaims(c)
-	u = User{
-		ID:       uint(claims["id"].(float64)),
-		Username: claims["username"].(string),
-		Nickname: claims["nickname"].(string),
-	}
-	return u
 }
